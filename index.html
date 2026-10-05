@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PyFormatWhy - what does that Python format spec do?</title>
+<style>body{margin:0;background:#13171d;color:#e8edf3;font:16px/1.6 system-ui,sans-serif}main{max-width:720px;margin:0 auto;padding:48px 20px}h1{font-size:34px;margin:0 0 8px}code{font-family:ui-monospace,Menlo,monospace;background:#1c222b;padding:1px 5px;border-radius:4px}a.btn{display:inline-block;background:#ffd166;color:#241b00;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;margin:12px 0}a{color:#ffd166}.m{color:#95a1b2}</style></head><body><main>
+<h1>PyFormatWhy</h1>
+<p class="m">What does <code>{x:08.3f}</code> actually do?</p>
+<p>Pick an int, float or string and type a Python format spec. PyFormatWhy shows the result, how the spec was read piece by piece (fill, align, sign, <code>#</code>, <code>0</code>, width, grouping, precision, type), and why: for example why <code>format(2.5, ".0f")</code> is <code>2</code>, why <code>2.675</code> rounds to <code>2.67</code> (it shows the exact stored value), or why <code>.3</code> with no type gives <code>1.23e+03</code>.</p>
+<a class="btn" href="app.html">Open the app</a>
+<h3>How it was tested</h3>
+<p class="m">120,000 random (value, spec) cases (6 seeds) against Python 3.10.12's own <code>format()</code>: ints (including huge ones), floats (ties, tiny, huge, inf, nan, -0.0) and strings (accents, CJK, emoji), with random fill, align, sign, <code>#</code>, <code>0</code>, width, grouping, precision and type. 65,489 gave identical output, 54,511 were errors in both Python and the engine (random specs are often invalid), and 0 differed. The engine rounds floats from the exact binary value with ties to even, as Python does. A first seed was used while building; it found bugs (zero flag on strings, precision with no type, % overflow, character type alignment), all fixed before the counted seeds.</p>
+<p class="m">Only the fact that an error happens is checked. The error wording matches Python's in about 83% of the error cases in a sample run, because Python checks options in a different order. Not covered: Decimal, Fraction, datetime, bool, locale-aware <code>n</code>, nested fields, <code>!r</code>. Entirely client-side.</p>
+<p><a href="https://github.com/iLanis-agent/pyformatwhy">Source</a></p>
+</main></body></html>
