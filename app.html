@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PyFormatWhy - what does that Python format spec do?</title>
+<style>
+:root{--bg:#13171d;--panel:#1c222b;--line:#323b49;--tx:#e8edf3;--mut:#95a1b2;--acc:#ffd166;--no:#ef6f6c;--ok:#7bd88f}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,sans-serif}
+main{max-width:900px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:24px;margin:0 0 4px}p.sub{color:var(--mut);margin:0 0 14px}
+code,input,select,.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+.form{display:grid;grid-template-columns:140px 1fr 1fr;gap:10px}
+@media(max-width:640px){.form{grid-template-columns:1fr}}
+.form label{display:block;font-size:12px;color:var(--mut);margin-bottom:3px}
+.form input,.form select{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--tx);padding:9px;font-size:15px}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.presets button{background:var(--panel);border:1px solid var(--line);color:var(--tx);border-radius:6px;padding:5px 9px;cursor:pointer;font-size:13px}
+.presets button:hover,.presets button.on{border-color:var(--acc)}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:12px 0}
+.box h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 8px}
+.res{font-size:22px;white-space:pre;padding:8px 10px;background:#0e1217;border-radius:6px;display:inline-block;min-width:60px;border:1px dashed var(--line)}
+.ws{color:var(--acc);opacity:.75}
+.err{border-color:var(--no)}.err .res{color:var(--no);font-size:16px;white-space:normal}
+table{border-collapse:collapse;width:100%}td{border-top:1px solid var(--line);padding:4px 8px;font-size:14px}td:first-child{color:var(--mut);width:110px}
+.note{margin:5px 0;padding-left:10px;border-left:3px solid var(--acc);font-size:14px}
+.exact{color:var(--mut);font-size:13px;word-break:break-all}
+footer{color:var(--mut);font-size:12px;margin-top:18px}a{color:var(--acc)}
+</style></head><body><main>
+<h1>PyFormatWhy</h1>
+<p class="sub">Pick a value and a Python format spec, the part after the colon in <code>f"{value:spec}"</code> or <code>format(value, spec)</code>. See the result, how the spec was read, and why.</p>
+<div class="form">
+<div><label for="kind">Value type</label><select id="kind"><option value="int">int</option><option value="float">float</option><option value="str">str</option></select></div>
+<div><label for="val">Value</label><input id="val" spellcheck="false" autocomplete="off"></div>
+<div><label for="spec">Format spec</label><input id="spec" spellcheck="false" autocomplete="off"></div>
+</div>
+<div class="presets" id="presets"></div>
+<div id="out"></div>
+<footer>Matches Python 3.10 (<code>z</code> and other 3.11+ options are errors here, as they are there). Not covered: Decimal, Fraction, datetime, bool, the locale-specific <code>n</code> (treated like the C locale), nested <code>{}</code> fields, <code>!r</code> conversions. Error wording is close to Python's but its check order differs, so only the fact that it errors is verified. <a href="index.html">About &amp; tests</a></footer>
+</main>
+<script src="engine.js"></script>
+<script>
+var PRESETS=[
+['Two decimals','float','3.14159','.2f'],
+['Thousands','float','1234567.891',',.2f'],
+['Round half to even','float','2.5','.0f'],
+['2.675 is not 2.675','float','2.675','.2f'],
+['Zero padded','float','-3.14159','08.3f'],
+['Hex with prefix','int','255','#010x'],
+['Percent','float','0.256','.1%'],
+['Zero + commas','int','1234567','015,'],
+['Center with fill','str','hi','*^11'],
+['Always show sign','int','5','+d'],
+['= alignment','int','42','*=+8'],
+['Precision, no type','float','1234.5678','.3'],
+['Scientific','float','123456.789','e'],
+['Truncate a string','str','abcdef','.3']
+];
+function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!==undefined)e.textContent=x;return e;}
+function vis(s,p){Array.from(s).forEach(function(c){if(c===' ')p.appendChild(el('span','ws','\u00b7'));else if(c==='\t')p.appendChild(el('span','ws','\u2192'));else p.appendChild(document.createTextNode(c));});}
+var $=function(i){return document.getElementById(i);},out=$('out'),pb=$('presets');
+function num(s){s=s.trim();return s==='inf'||s==='+inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);}
+function render(){
+  out.textContent='';
+  var kind=$('kind').value,raw=$('val').value,spec=$('spec').value,val;
+  try{
+    if(kind==='int'){if(!/^\s*[+-]?\d+\s*$/.test(raw))throw new Error('int value: enter digits only');val=BigInt(raw.trim());}
+    else if(kind==='float'){val=num(raw);if(val!==val&&raw.trim().toLowerCase()!=='nan')throw new Error('float value: enter a number, inf, -inf or nan');}
+    else val=raw;
+  }catch(e){var b=el('div','box err');b.appendChild(el('h2',null,'Value'));b.appendChild(el('div','res',e.message));out.appendChild(b);return;}
+  var o,R,err=null;
+  try{o=PyFormat.parseSpec(spec);}catch(e){err=e.message;}
+  if(!err){try{R=PyFormat.format(kind,val,spec);}catch(e){err=e.message;}}
+  var b1=el('div','box'+(err?' err':''));b1.appendChild(el('h2',null,err?'Python raises ValueError':'Result'));
+  var r=el('div','res');if(err)r.textContent=err;else vis(R.out,r);b1.appendChild(r);
+  if(!err){b1.appendChild(el('div','exact','length '+Array.from(R.out).length+'  (\u00b7 marks a space)'));}
+  out.appendChild(b1);
+  if(kind==='float'&&isFinite(val)&&val!==0){
+    var ex=PyFormat.exactString(val),b0=el('div','box');b0.appendChild(el('h2',null,'The float is really'));b0.appendChild(el('div','exact',ex));
+    if(ex.replace(/^-/,'').replace('.','').length>17)b0.appendChild(el('div','exact','Not exactly '+raw.trim()+': format works on this stored value.'));
+    out.appendChild(b0);
+  }
+  if(o){
+    var b2=el('div','box');b2.appendChild(el('h2',null,'How the spec was read'));
+    var t=el('table');PyFormat.describe(o).forEach(function(p){var tr=el('tr');tr.appendChild(el('td',null,p[0]));tr.appendChild(el('td','mono',p[1]));t.appendChild(tr);});b2.appendChild(t);
+    var N=[];
+    if(o.zero&&o.align===null&&kind!=='str')N.push('The 0 before the width means: pad with zeros, placed after the sign and prefix (same as fill 0 with = alignment).');
+    if(o.zero&&kind==='str')N.push('For a string the 0 only sets the fill character to 0; padding stays on the right.');
+    if(o.align==='='&&kind!=='str')N.push('= puts the padding between the sign (or 0x prefix) and the digits.');
+    if(o.align===null&&o.width!==null&&!o.zero)N.push(kind==='str'?'No alignment given: text is left-aligned.':'No alignment given: numbers are right-aligned.');
+    if(o.group)N.push('"'+o.group+'" groups digits in threes'+(o.type==='x'||o.type==='X'||o.type==='b'||o.type==='o'?' (fours for binary, octal and hex, and only "_" is allowed)':'')+'.');
+    if(o.prec!==null){var ty=o.type;N.push(kind==='str'?'Precision on a string keeps at most '+o.prec+' characters.':(ty==='g'||ty==='G'||ty===null)?'Precision here counts significant digits, not decimals'+(ty===null?' (with no type, Python also switches to e-notation earlier than g does)':'')+'.':ty==='%'||ty==='f'||ty==='F'||ty==='e'||ty==='E'?'Precision counts digits after the decimal point'+(ty==='%'?' of the percentage':'')+'.':'');}
+    if(o.type===null&&kind==='float'&&o.prec===null)N.push('No type on a float: Python prints the shortest text that reads back as the same float, like repr().');
+    if(o.type==='%')N.push('% multiplies by 100 first, then formats as f and adds a percent sign.');
+    if(o.alt)N.push('# is the alternate form: '+(kind==='int'?'adds 0x, 0o or 0b for hex, octal and binary.':'keeps the decimal point (and trailing zeros for g).'));
+    if(kind==='float'&&o.type==='f'&&isFinite(val)&&val!==0)N.push('f rounds the stored value exactly, ties to even; that is why 2.5 gives 2 and 2.675 gives 2.67.');
+    N.forEach(function(n){if(n)b2.appendChild(el('div','note',n));});
+    out.appendChild(b2);
+  }
+}
+PRESETS.forEach(function(p){var b=el('button',null,p[0]);b.type='button';b.onclick=function(){$('kind').value=p[1];$('val').value=p[2];$('spec').value=p[3];[].forEach.call(pb.children,function(c){c.classList.remove('on');});b.classList.add('on');render();};pb.appendChild(b);});
+['kind','val','spec'].forEach(function(i){$(i).addEventListener('input',function(){[].forEach.call(pb.children,function(c){c.classList.remove('on');});render();});});
+pb.children[3].click();
+</script></body></html>
